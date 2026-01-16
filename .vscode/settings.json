@@ -1,5 +1,8 @@
 {
     "terminal.integrated.commandsToSkipShell": [],
     "python.terminal.useEnvFile": true,
-    "python.envFile": "${workspaceFolder}/.env"
+    "python.envFile": "${workspaceFolder}/.env",
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    "python-envs.pythonProjects": []
 }
