@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/tariq/Desktop/Network%20Security%20Project/mlruns/0/e416389f696e4551a495b9ef6f7c7954/artifacts
+end_time: 1768703214769
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: e416389f696e4551a495b9ef6f7c7954
+run_name: clean-cub-23
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1768703208349
+status: 3
+tags: []
+user_id: tariq

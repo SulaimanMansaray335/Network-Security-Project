@@ -1,0 +1,22 @@
+artifact_path: file:///C:/Users/tariq/Desktop/Network%20Security%20Project/mlruns/0/models/m-d12a9d86631a48bfabc8726a8a44f5fc/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.10.19
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.7.1
+mlflow_version: 3.3.2
+model_id: m-d12a9d86631a48bfabc8726a8a44f5fc
+model_size_bytes: 16467367
+model_uuid: m-d12a9d86631a48bfabc8726a8a44f5fc
+prompts: null
+run_id: 73ae64b5b4d247b98ccb49836f853cfc
+utc_time_created: '2026-01-17 22:45:05.599577'

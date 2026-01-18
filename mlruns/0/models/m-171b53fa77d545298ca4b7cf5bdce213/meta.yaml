@@ -1,0 +1,10 @@
+artifact_location: file:///C:/Users/tariq/Desktop/Network%20Security%20Project/mlruns/0/models/m-171b53fa77d545298ca4b7cf5bdce213/artifacts
+creation_timestamp: 1768703208457
+experiment_id: '0'
+last_updated_timestamp: 1768703214763
+model_id: m-171b53fa77d545298ca4b7cf5bdce213
+model_type: null
+name: model
+source_run_id: e416389f696e4551a495b9ef6f7c7954
+status: 2
+status_message: null
