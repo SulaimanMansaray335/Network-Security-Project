@@ -30,7 +30,7 @@ jobs:
     needs: integration
     runs-on: ubuntu-latest
     outputs:
-      image: ${{ steps.build-image.outputs.image }}
+      image_digest: ${{ steps.build-image.outputs.image_digest }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -62,7 +62,10 @@ jobs:
           # be deployed to ECS.
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          # Query ECR for the image digest and export it as a non-secret job output
+          IMAGE_DIGEST=$(aws ecr describe-images --repository-name $ECR_REPOSITORY --image-ids imageTag=$IMAGE_TAG --query 'imageDetails[0].imageDigest' --output text || true)
+          echo "image_digest=$IMAGE_DIGEST" >> $GITHUB_OUTPUT
+          echo "Built and pushed: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG (digest: $IMAGE_DIGEST)"
 
   Continuous-Deployment:
     needs: build-and-push-ecr-image
@@ -83,13 +86,33 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1
       
       
-      - name: Pull image built in previous job
+      - name: Pull image built in previous job (use digest + retry)
         run: |
-         IMAGE="${{ needs.build-and-push-ecr-image.outputs.image }}"
-         if [ -z "$IMAGE" ]; then
-           IMAGE="${{ secrets.AWS_ECR_LOGIN_URI}}/${{ secrets.ECR_REPOSITORY_NAME }}:latest"
+         set -euo pipefail
+         ECR_REGISTRY="${{ secrets.AWS_ECR_LOGIN_URI }}"
+         ECR_REPOSITORY="${{ secrets.ECR_REPOSITORY_NAME }}"
+         IMAGE_DIGEST="${{ needs.build-and-push-ecr-image.outputs.image_digest }}"
+
+         if [ -n "$IMAGE_DIGEST" ] && [ "$IMAGE_DIGEST" != "None" ]; then
+           IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY@$IMAGE_DIGEST"
+           echo "Using digest-based image: $IMAGE"
+           # Poll ECR until the image shows up (helps with eventual consistency)
+           attempts=0
+           max_attempts=12
+           until aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageDigest="$IMAGE_DIGEST" >/dev/null 2>&1 || [ $attempts -ge $max_attempts ]; do
+             attempts=$((attempts+1))
+             echo "Image not yet available in ECR; waiting (attempt $attempts/$max_attempts)..."
+             sleep 5
+           done
+           if [ $attempts -ge $max_attempts ]; then
+             echo "Timed out waiting for image in ECR; attempting docker pull anyway."
+           fi
+         else
+           IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+           echo "No digest available from build job; falling back to tag: $IMAGE"
          fi
-         echo "Using image: $IMAGE"
+
+         echo "Pulling $IMAGE"
          docker pull "$IMAGE"
          
       #- name: Stop and remove  container if running
@@ -98,11 +121,15 @@ jobs:
        
       - name: Run Docker Image to serve users
         run: |
-         IMAGE="${{ needs.build-and-push-ecr-image.outputs.image }}"
-         if [ -z "$IMAGE" ]; then
-           IMAGE="${{ secrets.AWS_ECR_LOGIN_URI}}/${{ secrets.ECR_REPOSITORY_NAME }}:latest"
+         ECR_REGISTRY="${{ secrets.AWS_ECR_LOGIN_URI }}"
+         ECR_REPOSITORY="${{ secrets.ECR_REPOSITORY_NAME }}"
+         IMAGE_DIGEST="${{ needs.build-and-push-ecr-image.outputs.image_digest }}"
+         if [ -n "$IMAGE_DIGEST" ] && [ "$IMAGE_DIGEST" != "None" ]; then
+           IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY@$IMAGE_DIGEST"
+         else
+           IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:latest"
          fi
-         docker run -d -p 8080:8080 --ipc="host" --name=networksecurity -e 'AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}' -e 'AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}' -e 'AWS_REGION=${{ secrets.AWS_REGION }}' "$IMAGE"
+         docker run -d -p 8080:8080 --ipc="host" --name=networksecurity -e "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" -e "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" -e "AWS_REGION=${{ secrets.AWS_REGION }}" "$IMAGE"
       - name: Clean previous images and containers
         run: |
          docker system prune -f
