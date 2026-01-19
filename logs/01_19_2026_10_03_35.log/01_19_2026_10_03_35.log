@@ -1,0 +1,3 @@
+[ 2026-01-19 10:03:35,537 ] 164 numexpr.utils - INFO - NumExpr defaulting to 12 threads.
+[ 2026-01-19 10:03:38,571 ] 1025 httpx - INFO - HTTP Request: GET https://dagshub.com/api/v1/user "HTTP/1.1 200 OK"
+[ 2026-01-19 10:03:38,578 ] 107 dagshub - INFO - Accessing as SulaimanMansaray335
