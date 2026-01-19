@@ -1,13 +1,8 @@
-FROM python:3.10-slim-bullseye
+FROM python:3.10-slim-buster
 WORKDIR /app
 COPY . /app
 
-# Install awscli with apt-get and clean up apt lists to reduce image size
-RUN apt-get update \
-	&& apt-get install -y --no-install-recommends awscli \
-	&& rm -rf /var/lib/apt/lists/*
+RUN apt update -y && apt install awscli -y
 
-# Install python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-CMD ["python", "app.py"]
+RUN apt-get update && pip install -r requirements.txt
+CMD ["python3", "app.py"]
