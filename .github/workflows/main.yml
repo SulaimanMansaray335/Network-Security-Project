@@ -55,12 +55,21 @@ jobs:
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
           IMAGE_TAG: latest
         run: |
-          # Build a docker container and 
+          # Build a docker container and
           # push it to ECR so that it can
           # be deployed to ECS.
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          set -euo pipefail
+          # Use secret ECR_REPOSITORY_NAME if present, otherwise fall back to repo name
+          ECR_REPOSITORY="${ECR_REPOSITORY:-${GITHUB_REPOSITORY#*/}}"
+          if [ -z "$ECR_REPOSITORY" ]; then
+            echo "ECR repository is not set. Set secret ECR_REPOSITORY_NAME or ensure GITHUB_REPOSITORY is available."
+            exit 1
+          fi
+          echo "Using ECR repository: $ECR_REPOSITORY"
+          docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          # use the recommended GITHUB_OUTPUT file instead of deprecated set-output
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
   Continuous-Deployment:
     needs: build-and-push-ecr-image
