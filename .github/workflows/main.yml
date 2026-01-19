@@ -86,17 +86,21 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1
       
       
-      - name: Pull image built in previous job (use digest + retry)
+      - name: Pull image built in previous job (try digest then tag with retries)
         run: |
          set -euo pipefail
          ECR_REGISTRY="${{ secrets.AWS_ECR_LOGIN_URI }}"
          ECR_REPOSITORY="${{ secrets.ECR_REPOSITORY_NAME }}"
          IMAGE_DIGEST="${{ needs.build-and-push-ecr-image.outputs.image_digest }}"
+         IMAGE_TAG="latest"
+
+         pulled=0
+
+         try_pull() { docker pull "$1" >/dev/null 2>&1 && return 0 || return 1; }
 
          if [ -n "$IMAGE_DIGEST" ] && [ "$IMAGE_DIGEST" != "None" ]; then
-           IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY@$IMAGE_DIGEST"
-           echo "Using digest-based image: $IMAGE"
-           # Poll ECR until the image shows up (helps with eventual consistency)
+           DIGEST_IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY@$IMAGE_DIGEST"
+           echo "Will try digest-based image: $DIGEST_IMAGE"
            attempts=0
            max_attempts=12
            until aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageDigest="$IMAGE_DIGEST" >/dev/null 2>&1 || [ $attempts -ge $max_attempts ]; do
@@ -104,16 +108,40 @@ jobs:
              echo "Image not yet available in ECR; waiting (attempt $attempts/$max_attempts)..."
              sleep 5
            done
-           if [ $attempts -ge $max_attempts ]; then
-             echo "Timed out waiting for image in ECR; attempting docker pull anyway."
+           echo "Attempting docker pull by digest: $DIGEST_IMAGE"
+           if try_pull "$DIGEST_IMAGE"; then
+             echo "Pulled by digest"
+             pulled=1
+           else
+             echo "Digest pull failed; will try tag-based pulls next"
            fi
-         else
-           IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:latest"
-           echo "No digest available from build job; falling back to tag: $IMAGE"
          fi
 
-         echo "Pulling $IMAGE"
-         docker pull "$IMAGE"
+         if [ $pulled -eq 0 ]; then
+           TAG_IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+           echo "Attempting tag-based pull: $TAG_IMAGE"
+           attempts=0
+           max_attempts=12
+           while [ $attempts -lt $max_attempts ]; do
+             attempts=$((attempts+1))
+             echo "Trying docker pull tag (attempt $attempts/$max_attempts)..."
+             if try_pull "$TAG_IMAGE"; then
+               echo "Pulled by tag"
+               pulled=1
+               break
+             fi
+             sleep 5
+           done
+         fi
+
+         if [ $pulled -eq 0 ]; then
+           echo "Failed to pull image by digest or tag after retries. Dumping ECR metadata for diagnostics."
+           aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageDigest="$IMAGE_DIGEST" || true
+           aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag=$IMAGE_TAG || true
+           aws ecr list-images --repository-name "$ECR_REPOSITORY" --output json || true
+           echo "Exiting with failure to allow investigation."
+           exit 1
+         fi
          
       #- name: Stop and remove  container if running
        # run: |
